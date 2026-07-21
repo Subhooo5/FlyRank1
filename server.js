@@ -3,12 +3,15 @@ const express = require('express');
 const app = express();
 const PORT = 3000;
 
+app.use(express.json());
+
 // In-memory data store
 let tasks = [
   { id: 1, title: 'Buy groceries', done: false },
   { id: 2, title: 'Write project report', done: true },
   { id: 3, title: 'Call the dentist', done: false },
 ];
+let nextId = 4;
 
 app.get('/', (req, res) => {
   res.json({
@@ -35,6 +38,17 @@ app.get('/tasks/:id', (req, res) => {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
   res.json(task);
+});
+
+// Create a new task
+app.post('/tasks', (req, res) => {
+  const { title } = req.body || {};
+  if (typeof title !== 'string' || title.trim() === '') {
+    return res.status(400).json({ error: 'Title is required and must be a non-empty string' });
+  }
+  const task = { id: nextId++, title: title.trim(), done: false };
+  tasks.push(task);
+  res.status(201).json(task);
 });
 
 app.listen(PORT, () => {
