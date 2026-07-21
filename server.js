@@ -3,6 +3,13 @@ const express = require('express');
 const app = express();
 const PORT = 3000;
 
+// In-memory data store
+let tasks = [
+  { id: 1, title: 'Buy groceries', done: false },
+  { id: 2, title: 'Write project report', done: true },
+  { id: 3, title: 'Call the dentist', done: false },
+];
+
 app.get('/', (req, res) => {
   res.json({
     name: 'Task API',
@@ -13,6 +20,21 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// List all tasks
+app.get('/tasks', (req, res) => {
+  res.json(tasks);
+});
+
+// Get a single task by id
+app.get('/tasks/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const task = tasks.find((t) => t.id === id);
+  if (!task) {
+    return res.status(404).json({ error: `Task ${req.params.id} not found` });
+  }
+  res.json(task);
 });
 
 app.listen(PORT, () => {
