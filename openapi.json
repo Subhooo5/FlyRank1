@@ -1,0 +1,197 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Task API",
+    "version": "1.0",
+    "description": "A simple in-memory CRUD API for managing tasks."
+  },
+  "servers": [
+    { "url": "http://localhost:3000", "description": "Local development server" }
+  ],
+  "tags": [
+    { "name": "Tasks", "description": "Create, read, update and delete tasks" }
+  ],
+  "paths": {
+    "/tasks": {
+      "get": {
+        "tags": ["Tasks"],
+        "summary": "List all tasks",
+        "operationId": "listTasks",
+        "responses": {
+          "200": {
+            "description": "An array of tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Task" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Tasks"],
+        "summary": "Create a new task",
+        "operationId": "createTask",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NewTask" },
+              "example": { "title": "Learn Express" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created task",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Task" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed (title missing or empty)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Title is required and must be a non-empty string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Numeric ID of the task",
+          "schema": { "type": "integer" }
+        }
+      ],
+      "get": {
+        "tags": ["Tasks"],
+        "summary": "Get a single task by ID",
+        "operationId": "getTask",
+        "responses": {
+          "200": {
+            "description": "The requested task",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Task" }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Task 99 not found" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Tasks"],
+        "summary": "Update an existing task",
+        "operationId": "updateTask",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateTask" },
+              "example": { "title": "Updated title", "done": true }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated task",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Task" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Done must be a boolean" }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Task 99 not found" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Tasks"],
+        "summary": "Delete a task",
+        "operationId": "deleteTask",
+        "responses": {
+          "204": { "description": "Task deleted successfully (no content)" },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Task 99 not found" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "title": { "type": "string", "example": "Buy groceries" },
+          "done": { "type": "boolean", "example": false }
+        },
+        "required": ["id", "title", "done"]
+      },
+      "NewTask": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "example": "Learn Express" }
+        },
+        "required": ["title"]
+      },
+      "UpdateTask": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "example": "Updated title" },
+          "done": { "type": "boolean", "example": true }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}
