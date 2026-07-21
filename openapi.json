@@ -16,7 +16,24 @@
       "get": {
         "tags": ["Tasks"],
         "summary": "List all tasks",
+        "description": "Returns all tasks. Supports optional filtering by completion status (`done`) and case-insensitive title search (`search`); both may be combined.",
         "operationId": "listTasks",
+        "parameters": [
+          {
+            "name": "done",
+            "in": "query",
+            "required": false,
+            "description": "Filter by completion status.",
+            "schema": { "type": "string", "enum": ["true", "false"] }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Return only tasks whose title contains this word (case-insensitive).",
+            "schema": { "type": "string" }
+          }
+        ],
         "responses": {
           "200": {
             "description": "An array of tasks",
@@ -26,6 +43,15 @@
                   "type": "array",
                   "items": { "$ref": "#/components/schemas/Task" }
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Query param 'done' must be 'true' or 'false'" }
               }
             }
           }
@@ -158,6 +184,46 @@
           }
         }
       }
+    },
+    "/stats": {
+      "get": {
+        "tags": ["Tasks"],
+        "summary": "Get task statistics",
+        "description": "Returns counts computed from the current in-memory tasks array.",
+        "operationId": "getStats",
+        "responses": {
+          "200": {
+            "description": "Aggregate task counts",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Stats" },
+                "example": { "total": 3, "done": 1, "open": 2 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reset": {
+      "post": {
+        "tags": ["Tasks"],
+        "summary": "Reset the store to the original example tasks",
+        "description": "Replaces the in-memory tasks array with the original 3 example tasks and returns the reset list.",
+        "operationId": "resetTasks",
+        "responses": {
+          "200": {
+            "description": "The reset list of tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Task" }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -184,6 +250,15 @@
           "title": { "type": "string", "example": "Updated title" },
           "done": { "type": "boolean", "example": true }
         }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer", "example": 3 },
+          "done": { "type": "integer", "example": 1 },
+          "open": { "type": "integer", "example": 2 }
+        },
+        "required": ["total", "done", "open"]
       },
       "Error": {
         "type": "object",

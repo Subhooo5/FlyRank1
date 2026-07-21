@@ -35,15 +35,17 @@ Interactive Swagger documentation is available at **http://localhost:3000/docs**
 
 ## Endpoints
 
-| Method | Path          | Description                        | Success | Errors |
-|--------|---------------|------------------------------------|---------|--------|
-| GET    | `/`           | API info (name, version, endpoints)| 200     | —      |
-| GET    | `/health`     | Health check                       | 200     | —      |
-| GET    | `/tasks`      | List all tasks                     | 200     | —      |
-| GET    | `/tasks/:id`  | Get a single task by ID            | 200     | 404    |
-| POST   | `/tasks`      | Create a task (`title` required)   | 201     | 400    |
+| Method | Path          | Description                        | Success | Errors   |
+|--------|---------------|------------------------------------|---------|----------|
+| GET    | `/`           | API info (name, version, endpoints)| 200     | —        |
+| GET    | `/health`     | Health check                       | 200     | —        |
+| GET    | `/tasks`      | List all tasks (optional `?done=` / `?search=`) | 200 | 400 |
+| GET    | `/tasks/:id`  | Get a single task by ID            | 200     | 404      |
+| POST   | `/tasks`      | Create a task (`title` required)   | 201     | 400      |
 | PUT    | `/tasks/:id`  | Update a task (`title` / `done`)   | 200     | 400, 404 |
-| DELETE | `/tasks/:id`  | Delete a task                      | 204     | 404    |
+| DELETE | `/tasks/:id`  | Delete a task                      | 204     | 404      |
+| GET    | `/stats`      | Task counts (`total` / `done` / `open`) | 200 | —      |
+| POST   | `/reset`      | Reset store to the original 3 tasks | 200    | —        |
 
 ### Error format
 
@@ -92,6 +94,35 @@ curl -i -X PUT http://localhost:3000/tasks/1 \
 # Delete a task
 curl -i -X DELETE http://localhost:3000/tasks/1
 ```
+
+## Optional
+
+These optional extras were added on top of the core CRUD API:
+
+- **Filtering** — `GET /tasks?done=true` (or `?done=false`) returns only tasks with that completion status.
+- **Search** — `GET /tasks?search=word` returns tasks whose title contains `word` (case-insensitive). Filtering and search can be combined, e.g. `?done=false&search=call`.
+- **Stats** — `GET /stats` returns `{ "total", "done", "open" }` counts computed from the current in-memory tasks array.
+- **Reset** — `POST /reset` replaces the in-memory tasks with the original 3 example tasks and returns the reset list.
+
+One example curl per extra:
+
+```bash
+# Filtering — only completed tasks
+curl -i "http://localhost:3000/tasks?done=true"
+
+# Search — tasks whose title contains "call"
+curl -i "http://localhost:3000/tasks?search=call"
+
+# Stats — counts of total/done/open
+curl -i http://localhost:3000/stats
+
+# Reset — restore the original 3 example tasks
+curl -i -X POST http://localhost:3000/reset
+```
+
+### Mortality experiment
+
+After creating a couple of extra tasks via `POST /tasks` and confirming they appeared in `GET /tasks`, the server process was stopped and restarted, and `GET /tasks` then showed only the original 3 seed tasks — the newly created ones were gone. This happens because the tasks live only in a JavaScript array in the running process's memory (there is no database or file persistence), so all runtime changes are lost the moment the process exits and the array is re-seeded on the next startup.
 
 ## API documentation (Swagger UI)
 
