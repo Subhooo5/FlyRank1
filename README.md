@@ -101,9 +101,9 @@ generated from [`openapi.json`](./openapi.json).
 <!-- Replace the placeholder below with a real screenshot of the Swagger UI.
      Save the image as docs/swagger-screenshot.png and it will render here. -->
 
-![Swagger UI screenshot](docs/swagger-screenshot.png)
+## Swagger UI screenshot
+<img width="1001" height="744" alt="Screenshot 2026-07-21 at 11 02 52 PM" src="https://github.com/user-attachments/assets/03604750-e824-417d-b034-05dc1fc5cd65" />
 
-> _Screenshot placeholder — run the server, open `/docs`, and capture the page to `docs/swagger-screenshot.png`._
 
 ## Project structure
 
