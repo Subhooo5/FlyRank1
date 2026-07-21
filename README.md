@@ -133,7 +133,7 @@ generated from [`openapi.json`](./openapi.json).
      Save the image as docs/swagger-screenshot.png and it will render here. -->
 
 ## Swagger UI screenshot
-<img width="1001" height="744" alt="Screenshot 2026-07-21 at 11 02 52 PM" src="https://github.com/user-attachments/assets/03604750-e824-417d-b034-05dc1fc5cd65" />
+<img width="734" height="661" alt="swagger-screenshot" src="https://github.com/user-attachments/assets/99301951-112a-4783-803b-4b89217c720f" />
 
 
 ## Project structure
