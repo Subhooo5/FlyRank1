@@ -51,6 +51,43 @@ app.post('/tasks', (req, res) => {
   res.status(201).json(task);
 });
 
+// Update an existing task
+app.put('/tasks/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const task = tasks.find((t) => t.id === id);
+  if (!task) {
+    return res.status(404).json({ error: `Task ${req.params.id} not found` });
+  }
+
+  const { title, done } = req.body || {};
+
+  if (title !== undefined && (typeof title !== 'string' || title.trim() === '')) {
+    return res.status(400).json({ error: 'Title must be a non-empty string' });
+  }
+  if (done !== undefined && typeof done !== 'boolean') {
+    return res.status(400).json({ error: 'Done must be a boolean' });
+  }
+  if (title === undefined && done === undefined) {
+    return res.status(400).json({ error: 'Provide at least one field to update: title or done' });
+  }
+
+  if (title !== undefined) task.title = title.trim();
+  if (done !== undefined) task.done = done;
+
+  res.json(task);
+});
+
+// Delete a task
+app.delete('/tasks/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const index = tasks.findIndex((t) => t.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: `Task ${req.params.id} not found` });
+  }
+  tasks.splice(index, 1);
+  res.status(204).end();
+});
+
 app.listen(PORT, () => {
   console.log(`Task API listening on http://localhost:${PORT}`);
 });
