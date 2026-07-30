@@ -1,7 +1,7 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
-const { init } = require('./db');
+const { db, init } = require('./db');
 
 // Create the tasks table if needed and seed it on first run only
 init();
@@ -13,7 +13,21 @@ app.use(express.json());
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
-// Original example tasks, used to seed and to reset the store
+// SQLite stores booleans as 0/1, so rows are mapped back to the JSON shape
+// the API has always returned: { id, title, done: true|false }
+function toTask(row) {
+  return { id: row.id, title: row.title, done: Boolean(row.done) };
+}
+
+// Escape LIKE wildcards so ?search=100% matches literally, like the old
+// JavaScript substring filter did
+function likePattern(needle) {
+  return '%' + String(needle).replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+}
+
+// Original example tasks, used to seed and to reset the store.
+// TEMPORARY: the write routes below still use this array; they move to SQL in
+// the next stages.
 function seedTasks() {
   return [
     { id: 1, title: 'Buy groceries', done: false },
@@ -22,7 +36,6 @@ function seedTasks() {
   ];
 }
 
-// In-memory data store
 let tasks = seedTasks();
 let nextId = 4;
 
@@ -40,34 +53,42 @@ app.get('/health', (req, res) => {
 
 // Listing all tasks, with optional ?done= and ?search= filters (combinable)
 app.get('/tasks', (req, res) => {
-  let result = tasks;
-
   const { done, search } = req.query;
+
+  const where = [];
+  const params = [];
 
   if (done !== undefined) {
     if (done !== 'true' && done !== 'false') {
       return res.status(400).json({ error: "Query param 'done' must be 'true' or 'false'" });
     }
-    const wantDone = done === 'true';
-    result = result.filter((t) => t.done === wantDone);
+    where.push('done = ?');
+    params.push(done === 'true' ? 1 : 0);
   }
 
   if (search !== undefined && search !== '') {
-    const needle = String(search).toLowerCase();
-    result = result.filter((t) => t.title.toLowerCase().includes(needle));
+    // LIKE is case-insensitive for ASCII in SQLite, matching the old behaviour
+    where.push("title LIKE ? ESCAPE '\\'");
+    params.push(likePattern(search));
   }
 
-  res.json(result);
+  const sql =
+    'SELECT id, title, done FROM tasks' +
+    (where.length ? ' WHERE ' + where.join(' AND ') : '') +
+    ' ORDER BY id';
+
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows.map(toTask));
 });
 
 // Getting a single task by id
 app.get('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
-  if (!task) {
+  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  if (!row) {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
-  res.json(task);
+  res.json(toTask(row));
 });
 
 // Creating a new task
