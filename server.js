@@ -48,9 +48,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Listing all tasks, with optional ?done= and ?search= filters (combinable)
+// Listing all tasks, with optional ?done=, ?search= and ?sort= (all combinable)
 app.get('/tasks', (req, res) => {
-  const { done, search } = req.query;
+  const { done, search, sort } = req.query;
 
   const where = [];
   const params = [];
@@ -69,10 +69,20 @@ app.get('/tasks', (req, res) => {
     params.push(likePattern(search));
   }
 
+  // Default ordering stays by id; ?sort=title orders alphabetically, ignoring case
+  let orderBy = 'id';
+  if (sort !== undefined) {
+    if (sort !== 'title') {
+      return res.status(400).json({ error: 'invalid sort value' });
+    }
+    orderBy = 'title COLLATE NOCASE ASC, id';
+  }
+
   const sql =
     'SELECT id, title, done FROM tasks' +
     (where.length ? ' WHERE ' + where.join(' AND ') : '') +
-    ' ORDER BY id';
+    ' ORDER BY ' +
+    orderBy;
 
   const rows = db.prepare(sql).all(...params);
   res.json(rows.map(toTask));
