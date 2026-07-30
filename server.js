@@ -3,6 +3,17 @@ const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
 const { db, init, reset } = require('./db');
 
+// The database can also be inspected by hand with the sqlite3 CLI or DB Browser
+// for SQLite, e.g.:
+//   sqlite3 tasks.db "SELECT * FROM tasks;"
+//   sqlite3 tasks.db "SELECT * FROM tasks WHERE done = 1;"
+//   sqlite3 tasks.db "SELECT COUNT(*) FROM tasks;"
+// Write statements such as
+//   UPDATE tasks SET done = 1 WHERE id = 1;   -- marks task 1 complete
+//   DELETE FROM tasks WHERE id = 1;           -- removes task 1
+// change the stored data permanently, so they are documented here rather than
+// run against the seeded database.
+
 // Create the tasks table if needed and seed it on first run only
 init();
 
