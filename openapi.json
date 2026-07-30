@@ -3,7 +3,7 @@
   "info": {
     "title": "Task API",
     "version": "1.0",
-    "description": "A simple in-memory CRUD API for managing tasks."
+    "description": "A simple CRUD API for managing tasks, backed by a SQLite database (tasks.db)."
   },
   "servers": [
     { "url": "http://localhost:3000", "description": "Local development server" }
@@ -189,7 +189,7 @@
       "get": {
         "tags": ["Tasks"],
         "summary": "Get task statistics",
-        "description": "Returns counts computed from the current in-memory tasks array.",
+        "description": "Returns counts computed with SQL COUNT() over the tasks table.",
         "operationId": "getStats",
         "responses": {
           "200": {
@@ -208,7 +208,7 @@
       "post": {
         "tags": ["Tasks"],
         "summary": "Reset the store to the original example tasks",
-        "description": "Replaces the in-memory tasks array with the original 3 example tasks and returns the reset list.",
+        "description": "Clears the tasks table, re-inserts the original 3 example tasks, and returns the reset list.",
         "operationId": "resetTasks",
         "responses": {
           "200": {
