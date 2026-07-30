@@ -1,6 +1,10 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
+const { init } = require('./db');
+
+// Create the tasks table if needed and seed it on first run only
+init();
 
 const app = express();
 const PORT = 3000;

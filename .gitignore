@@ -1,3 +1,12 @@
 node_modules/
 *.log
 .DS_Store
+
+# SQLite database file (created at runtime) and DB browser temp files
+tasks.db
+tasks.db-journal
+tasks.db-wal
+tasks.db-shm
+*.sqlite
+*.sqlite3
+
