@@ -97,9 +97,9 @@ app.post('/tasks', (req, res) => {
   if (typeof title !== 'string' || title.trim() === '') {
     return res.status(400).json({ error: 'Title is required and must be a non-empty string' });
   }
-  const task = { id: nextId++, title: title.trim(), done: false };
-  tasks.push(task);
-  res.status(201).json(task);
+  const info = db.prepare('INSERT INTO tasks (title, done) VALUES (?, 0)').run(title.trim());
+  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json(toTask(row));
 });
 
 // Updating an existing task
