@@ -1,7 +1,7 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
-const { db, init } = require('./db');
+const { db, init, reset } = require('./db');
 
 // Create the tasks table if needed and seed it on first run only
 init();
@@ -24,20 +24,6 @@ function toTask(row) {
 function likePattern(needle) {
   return '%' + String(needle).replace(/[\\%_]/g, (c) => '\\' + c) + '%';
 }
-
-// Original example tasks, used to seed and to reset the store.
-// TEMPORARY: the write routes below still use this array; they move to SQL in
-// the next stages.
-function seedTasks() {
-  return [
-    { id: 1, title: 'Buy groceries', done: false },
-    { id: 2, title: 'Write project report', done: true },
-    { id: 3, title: 'Call the dentist', done: false },
-  ];
-}
-
-let tasks = seedTasks();
-let nextId = 4;
 
 app.get('/', (req, res) => {
   res.json({
@@ -105,8 +91,8 @@ app.post('/tasks', (req, res) => {
 // Updating an existing task
 app.put('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
-  if (!task) {
+  const existing = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  if (!existing) {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
 
@@ -122,35 +108,47 @@ app.put('/tasks/:id', (req, res) => {
     return res.status(400).json({ error: 'Provide at least one field to update: title or done' });
   }
 
-  if (title !== undefined) task.title = title.trim();
-  if (done !== undefined) task.done = done;
+  const sets = [];
+  const params = [];
+  if (title !== undefined) {
+    sets.push('title = ?');
+    params.push(title.trim());
+  }
+  if (done !== undefined) {
+    sets.push('done = ?');
+    params.push(done ? 1 : 0);
+  }
+  params.push(id);
 
-  res.json(task);
+  db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  res.json(toTask(row));
 });
 
 // Deleting a task
 app.delete('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const index = tasks.findIndex((t) => t.id === id);
-  if (index === -1) {
+  const info = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  if (info.changes === 0) {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
-  tasks.splice(index, 1);
   res.status(204).end();
 });
 
-// Task statistics
+// Task statistics, counted by SQL
 app.get('/stats', (req, res) => {
-  const total = tasks.length;
-  const done = tasks.filter((t) => t.done).length;
+  const { total, done } = db
+    .prepare('SELECT COUNT(*) AS total, COUNT(CASE WHEN done = 1 THEN 1 END) AS done FROM tasks')
+    .get();
   res.json({ total, done, open: total - done });
 });
 
-// Reset the store back to the original 3 example tasks
+// Reset the table back to the original 3 example tasks
 app.post('/reset', (req, res) => {
-  tasks = seedTasks();
-  nextId = 4;
-  res.json(tasks);
+  reset();
+  const rows = db.prepare('SELECT id, title, done FROM tasks ORDER BY id').all();
+  res.json(rows.map(toTask));
 });
 
 app.listen(PORT, () => {

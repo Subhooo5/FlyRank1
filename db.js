@@ -40,4 +40,14 @@ function seed() {
   insertAll(SEED_TASKS);
 }
 
-module.exports = { db, init, seed, DB_PATH };
+// Clear the table and re-insert the 3 example tasks, restarting ids at 1
+function reset() {
+  const run = db.transaction(() => {
+    db.prepare('DELETE FROM tasks').run();
+    db.prepare("DELETE FROM sqlite_sequence WHERE name = 'tasks'").run();
+    seed();
+  });
+  run();
+}
+
+module.exports = { db, init, seed, reset, DB_PATH };
