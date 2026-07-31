@@ -2,6 +2,10 @@ const { Pool } = require('pg');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+pool.on('error', (err) => {
+  console.error('Postgres pool error:', err.message);
+});
+
 const SEED_TASKS = [
   { title: 'Buy groceries', done: false },
   { title: 'Write project report', done: true },

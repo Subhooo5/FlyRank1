@@ -78,7 +78,7 @@ node server.js
 | Method | Path          | Description                        | Success | Errors   |
 |--------|---------------|------------------------------------|---------|----------|
 | GET    | `/`           | API info (name, version, endpoints)| 200     | —        |
-| GET    | `/health`     | Health check                       | 200     | —        |
+| GET    | `/health`     | Health check — runs `SELECT 1` against the DB, returns `{ status, db }` | 200 | 503 |
 | GET    | `/tasks`      | List all tasks (optional `?done=` / `?search=` / `?sort=`) | 200 | 400 |
 | GET    | `/tasks/:id`  | Get a single task by ID            | 200     | 404      |
 | POST   | `/tasks`      | Create a task (`title` required)   | 201     | 400      |
@@ -148,6 +148,10 @@ These optional extras were added on top of the core CRUD API:
 - **Timestamps** — every task stores `created_at` and `updated_at` (`YYYY-MM-DD HH:MM:SS`, UTC). `created_at` is set once on insert; `updated_at` is refreshed by every successful `PUT`.
 - **Stats** — `GET /stats` returns `{ "total", "done", "open" }` counts computed with SQL `COUNT()` over the `tasks` table.
 - **Reset** — `POST /reset` clears the `tasks` table, re-inserts the original 3 example tasks, and returns the reset list.
+- **Real health check** — `GET /health` runs `SELECT 1` against Postgres and returns
+  `{ "status": "ok", "db": "ok" }`, or `503` with `{ "status": "error", "db": "error" }` when the
+  database is unreachable. The API stays up either way, so it recovers on its own once the
+  database comes back.
 
 One example curl per extra:
 

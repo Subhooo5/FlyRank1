@@ -20,8 +20,13 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (req, res) => {
+  try {
+    await db.ping();
+  } catch (err) {
+    return res.status(503).json({ status: 'error', db: 'error' });
+  }
+  res.json({ status: 'ok', db: 'ok' });
 });
 
 // listing tasks
