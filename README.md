@@ -1,8 +1,9 @@
 # Task API
 
 A simple **CRUD REST API** for managing tasks, built with **Node.js** and **Express**.
-Tasks are stored in a **SQLite** database (`tasks.db`) via
-[better-sqlite3](https://github.com/WiseLibs/better-sqlite3), so data survives server restarts. See [Database (SQLite)](#database-sqlite) below.
+Tasks are stored in a **PostgreSQL** database running in Docker, accessed with the
+[`pg`](https://node-postgres.com/) driver. The whole stack — API plus database — starts with a
+single `docker compose up`. See [Database (PostgreSQL in Docker)](#database-postgresql-in-docker) below.
 
 Each task has the shape:
 
@@ -18,26 +19,59 @@ Each task has the shape:
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 18 or newer
-- npm (bundled with Node.js)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — the only requirement for
+  the one-command run below
+- [Node.js](https://nodejs.org/) 18 or newer and npm — only if you want to run the API outside
+  a container
 
-## Install
+## Run the whole stack with one command
 
 ```bash
 git clone https://github.com/<your-username>/FlyRank1.git
 cd FlyRank1
-npm install
+docker compose up
 ```
 
-## Run
+That builds the API image and starts two services defined in [`compose.yaml`](./compose.yaml):
 
-```bash
-node server.js
-```
+| Service | What it is | Address |
+|---------|------------|---------|
+| `api`   | this Express app | http://localhost:3000 |
+| `db`    | `postgres:16`, container `flyrank-db` | `localhost:5432` |
 
-The server starts on **http://localhost:3000**.
+The API waits for the database's `pg_isready` healthcheck before starting, creates the `tasks`
+table if it doesn't exist, and seeds 3 example tasks the first time only. Data lives in the
+named volume `flyrank-data`, so `docker compose down` followed by `docker compose up` keeps
+every task. Stop the stack with `docker compose down` (add `-v` to also delete the data).
 
 Interactive Swagger documentation is available at **http://localhost:3000/docs**.
+
+### Environment variables
+
+Copy [`.env.example`](./.env.example) to `.env` and fill in real values:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `DATABASE_URL` | Postgres connection string | `postgres://postgres:dev@localhost:5432/tasks` |
+| `PORT` | Port the API listens on | `3000` |
+
+`.env` holds real credentials and is git-ignored — only `.env.example` is committed. Under
+`docker compose` these values come from `compose.yaml` instead, where the host is `db` rather
+than `localhost`.
+
+### Running the API outside Docker
+
+Start just the database in Docker, then run the app on your machine:
+
+```bash
+docker compose up -d db
+npm install
+node server.js
+```
 
 ## Endpoints
 
@@ -52,6 +86,7 @@ Interactive Swagger documentation is available at **http://localhost:3000/docs**
 | DELETE | `/tasks/:id`  | Delete a task                      | 204     | 404      |
 | GET    | `/stats`      | Task counts (`total` / `done` / `open`) | 200 | —      |
 | POST   | `/reset`      | Reset store to the original 3 tasks | 200    | —        |
+| GET    | `/docs`       | Swagger UI, generated from `openapi.json` | 200 | —     |
 
 ### Error format
 
@@ -75,13 +110,16 @@ Response:
 HTTP/1.1 200 OK
 X-Powered-By: Express
 Content-Type: application/json; charset=utf-8
-Content-Length: 118
-Date: Tue, 21 Jul 2026 17:16:06 GMT
+Content-Length: 115
+ETag: W/"73-Fl3hfrZMXMmzU6clbLizJeq6s2c"
+Date: Fri, 31 Jul 2026 17:25:49 GMT
 Connection: keep-alive
 Keep-Alive: timeout=5
 
-{"id":1,"title":"Buy groceries","done":false,"created_at":"2026-07-30 16:21:01","updated_at":"2026-07-30 16:21:01"}
+{"id":1,"title":"Buy groceries","done":false,"created_at":"2026-07-31 17:25:49","updated_at":"2026-07-31 17:25:49"}
 ```
+
+(Captured against the stack started with `docker compose up`.)
 
 ### More examples
 
@@ -132,8 +170,9 @@ curl -i -X POST http://localhost:3000/reset
 
 ### Mortality experiment (Assignment 1 — no longer applies)
 
-> This experiment describes the original in-memory version of the API. Since the
-> migration to SQLite (below), created tasks **do** survive a restart.
+> This experiment describes the original in-memory version of the API. Since the migration to
+> a database (SQLite in Assignment 2, PostgreSQL now), created tasks **do** survive a restart.
+> See [Mortality experiment, part two](#mortality-experiment-part-two) for the Docker version.
 
 After creating a couple of extra tasks via `POST /tasks` and confirming they appeared in `GET /tasks`, the server process was stopped and restarted, and `GET /tasks` then showed only the original 3 seed tasks — the newly created ones were gone. This happens because the tasks live only in a JavaScript array in the running process's memory (there is no database or file persistence), so all runtime changes are lost the moment the process exits and the array is re-seeded on the next startup.
 
@@ -148,118 +187,61 @@ generated from [`openapi.json`](./openapi.json).
 ## Swagger UI screenshot
 <img width="734" height="661" alt="swagger-screenshot" src="https://github.com/user-attachments/assets/99301951-112a-4783-803b-4b89217c720f" />
 
+## Database (PostgreSQL in Docker)
 
-## Database (SQLite)
+### What changed
 
-Tasks now live in a real database instead of a JavaScript array. Every endpoint
-(`GET`, `POST`, `PUT`, `DELETE`, `/stats`, `/reset`) runs SQL against it. Paths, status
-codes and error messages are unchanged from Assignment 1; task objects now carry the two
-extra `created_at` / `updated_at` fields.
+Storage moved from a local **SQLite** file (`tasks.db`, driver `better-sqlite3`) to a
+**containerized PostgreSQL** database (driver [`pg`](https://node-postgres.com/)). The API
+itself is unchanged from the client's point of view — same paths, same status codes, same
+error message wording, same `?done=` / `?search=` / `?sort=` extras, same task JSON.
 
-### Why SQLite?
+| | Before (Assignment 2) | Now (Assignment 3) |
+|---|---|---|
+| Database | SQLite file `tasks.db` | PostgreSQL 16 in Docker |
+| Driver | `better-sqlite3` (synchronous) | `pg` connection pool (async) |
+| Where data lives | a file in the repo | named Docker volume `flyrank-data` |
+| Booleans | `0` / `1` integers | native `BOOLEAN` |
+| Ids | `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` |
+| Case-insensitive search | `LIKE` (ASCII-insensitive by default) | `ILIKE` |
+| Alphabetical sort | `ORDER BY title COLLATE NOCASE` | `ORDER BY LOWER(title)` |
+| Config | hard-coded path | `DATABASE_URL` from `.env` |
+| Start command | `node server.js` | `docker compose up` |
 
-- **Zero setup** — no server process, no credentials, no Docker. The database is a
-  single file, so `npm install && node server.js` is still all it takes to run the project.
-- **Real SQL** — full `SELECT` / `INSERT` / `UPDATE` / `DELETE`, `WHERE`, `LIKE` and
-  `COUNT()`, so the filtering and stats features moved straight from JavaScript into SQL.
-- **Persistence** — data survives restarts and crashes, which was the whole point of
-  the migration.
-- **Right size for the job** — a single-user learning API doesn't need PostgreSQL or
-  MySQL; SQLite is the standard choice for embedded, file-backed storage.
-- **[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)** is used as the driver:
-  it is synchronous, which keeps the route handlers simple and readable.
+Every SQL statement lives in [`db.js`](./db.js); [`server.js`](./server.js) only validates
+input, awaits those functions and picks status codes.
 
-### Where the database lives
+### Why PostgreSQL?
 
-| | |
-|---|---|
-| File | `tasks.db` |
-| Path | project root, i.e. `<repo>/tasks.db` (resolved from `__dirname` in [`db.js`](./db.js)) |
-| Table | `tasks` |
+- **Concurrent access** — a real server process handles many clients at once, where a SQLite
+  file locks on write.
+- **Runs as its own service** — the database is no longer bound to the app's filesystem, which
+  is what makes the two-container compose setup possible.
+- **Richer SQL** — `RETURNING *`, `COUNT(*) FILTER (WHERE ...)`, `ILIKE` and real sequences
+  replaced workarounds needed under SQLite.
+- **Same setup everywhere** — the image pins an exact version, so every machine runs the same
+  database instead of "whatever SQLite ships with this Node build".
 
-The file is **not committed to git** (it is listed in `.gitignore`) — only the code that
-creates it is. On first run the app creates `tasks.db`, creates the `tasks` table if it
-doesn't exist, and inserts the 3 example tasks **only if the table is empty**, so
-restarting never duplicates the seed data.
-
-Schema:
+### Schema
 
 ```sql
 CREATE TABLE IF NOT EXISTS tasks (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  title      TEXT    NOT NULL,
-  done       INTEGER NOT NULL DEFAULT 0,                    -- 0 = open, 1 = done
-  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  id         SERIAL PRIMARY KEY,
+  title      TEXT NOT NULL,
+  done       BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
 );
 ```
 
-SQLite has no boolean type, so `done` is stored as `0`/`1` and converted back to
-`true`/`false` in the JSON responses. Timestamps are stored as UTC text in
-`YYYY-MM-DD HH:MM:SS` form. A `tasks.db` created before the timestamp columns existed is
-upgraded automatically on startup (`ALTER TABLE` + backfill), so no manual migration is needed.
+`created_at` is set once on insert; `updated_at` is refreshed by every successful `PUT`. Both
+are rendered as `YYYY-MM-DD HH:MM:SS` in JSON responses, matching the previous format.
+`POST /reset` clears the table inside a transaction, runs
+`ALTER SEQUENCE tasks_id_seq RESTART WITH 1` and re-seeds, so ids start again at 1.
 
-### How to start the project
+### Running Postgres without compose
 
-Unchanged from Assignment 1:
-
-```bash
-npm install
-node server.js
-```
-
-The database file is created automatically on first start — there is no migration step.
-
-### Inspecting the database
-
-With the `sqlite3` CLI:
-
-```bash
-# All tasks
-sqlite3 tasks.db "SELECT * FROM tasks;"
-
-# Only completed tasks
-sqlite3 tasks.db "SELECT * FROM tasks WHERE done = 1;"
-
-# How many tasks are stored
-sqlite3 tasks.db "SELECT COUNT(*) FROM tasks;"
-```
-
-Example output:
-
-```
-id  title                 done  created_at           updated_at
---  --------------------  ----  -------------------  -------------------
-1   Buy groceries         0     2026-07-30 16:21:01  2026-07-30 16:21:01
-2   Write project report  1     2026-07-30 16:21:01  2026-07-30 16:21:01
-3   Call the dentist      0     2026-07-30 16:21:01  2026-07-30 16:21:01
-```
-
-Or open `tasks.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and use the
-**Browse Data** tab.
-
-<!-- Placeholder: add a screenshot of tasks.db open in DB Browser for SQLite here.
-     Save the image as docs/db-browser-screenshot.png and reference it below. -->
-
-### Database viewer screenshot
-
-_Screenshot placeholder — `tasks.db` opened in DB Browser for SQLite (to be added)._
-
-## Project structure
-
-```
-.
-├── server.js       # Express app and all routes (SQL queries)
-├── db.js           # SQLite connection, table creation, seeding and reset
-├── tasks.db        # SQLite database file (created at runtime, git-ignored)
-├── openapi.json    # OpenAPI 3.0 specification
-├── package.json
-└── README.md
-```
-
-## Database (PostgreSQL in Docker)
-
-Storage is moving from SQLite to a containerized PostgreSQL instance. Start the database with:
+Compose is the normal path, but a standalone container works too:
 
 ```bash
 docker run --name flyrank-db \
@@ -270,19 +252,76 @@ docker run --name flyrank-db \
   -d postgres:16
 ```
 
-Check it is up and inspect the tables:
+The image is pinned to `postgres:16` because `postgres:latest` (18 and up) stores data under a
+different path and refuses a volume mounted at `/var/lib/postgresql/data`.
+
+### Inspecting the database
 
 ```bash
-docker ps
+# List tables
 docker exec -it flyrank-db psql -U postgres -d tasks -c "\dt"
+
+# All tasks
+docker exec -it flyrank-db psql -U postgres -d tasks -c "SELECT * FROM tasks;"
+
+# Only completed tasks
+docker exec -it flyrank-db psql -U postgres -d tasks -c "SELECT * FROM tasks WHERE done;"
+
+# How many tasks are stored
+docker exec -it flyrank-db psql -U postgres -d tasks -c "SELECT COUNT(*) FROM tasks;"
+
+# Or open an interactive session
+docker exec -it flyrank-db psql -U postgres -d tasks
 ```
 
-The named volume `flyrank-data` holds the data, so it survives `docker rm` of the container.
-The image is pinned to `postgres:16` because `postgres:latest` (18+) stores data under a
-different path and rejects a volume mounted at `/var/lib/postgresql/data`.
+Example output:
+
+```
+ id |        title         | done |         created_at         |         updated_at
+----+----------------------+------+----------------------------+----------------------------
+  1 | Buy groceries        | f    | 2026-07-31 17:20:20.195433 | 2026-07-31 17:20:20.195433
+  2 | Write project report | t    | 2026-07-31 17:20:20.195935 | 2026-07-31 17:20:20.195935
+  3 | Call the dentist     | f    | 2026-07-31 17:20:20.196267 | 2026-07-31 17:20:20.196267
+(3 rows)
+```
+
+Any Postgres GUI (TablePlus, pgAdmin, DBeaver, DataGrip) can connect to `localhost:5432` with
+user `postgres`, password `dev`, database `tasks`.
+
+<!-- Placeholder: add a screenshot of the database here — psql \dt output, or the tasks table
+     open in a GUI. Save it as docs/postgres-screenshot.png and reference it below. -->
+
+### Database screenshot
+
+_Screenshot placeholder — output of `\dt` / the `tasks` table in a Postgres client (to be added)._
+
+### Mortality experiment, part two
+
+The data lives in the named volume `flyrank-data`, not in the container, which is why
+`docker compose down` and then `docker compose up` brings every task back. Run the database
+without a volume and the story is the old one — removing the container deletes its writable
+layer, so all tasks vanish; `docker compose down -v` deletes the named volume and has the
+same effect.
+
+## Project structure
+
+```
+.
+├── server.js       # Express app and all routes (validation, status codes)
+├── db.js           # Postgres pool — every SQL statement lives here
+├── compose.yaml    # api + db services, one-command stack
+├── Dockerfile      # image for the api service
+├── .dockerignore
+├── .env.example    # placeholder env values (committed)
+├── .env            # real env values (git-ignored)
+├── openapi.json    # OpenAPI 3.0 specification
+├── package.json
+└── README.md
+```
 
 ## Notes
 
-- Tasks are stored in the SQLite file `tasks.db`, so data persists across server restarts.
+- Tasks are stored in PostgreSQL, in the Docker volume `flyrank-data`, so data persists across
+  restarts of both the app and the containers.
 - IDs auto-increment and are not reused after deletion. `POST /reset` empties the table and
   restarts IDs from 1.

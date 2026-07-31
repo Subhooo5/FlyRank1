@@ -3,7 +3,7 @@
   "info": {
     "title": "Task API",
     "version": "1.0",
-    "description": "A simple CRUD API for managing tasks, backed by a SQLite database (tasks.db)."
+    "description": "A simple CRUD API for managing tasks, backed by a PostgreSQL database running in Docker."
   },
   "servers": [
     { "url": "http://localhost:3000", "description": "Local development server" }
