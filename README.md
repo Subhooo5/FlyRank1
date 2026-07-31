@@ -257,6 +257,30 @@ _Screenshot placeholder — `tasks.db` opened in DB Browser for SQLite (to be ad
 └── README.md
 ```
 
+## Database (PostgreSQL in Docker)
+
+Storage is moving from SQLite to a containerized PostgreSQL instance. Start the database with:
+
+```bash
+docker run --name flyrank-db \
+  -e POSTGRES_PASSWORD=dev \
+  -e POSTGRES_DB=tasks \
+  -p 5432:5432 \
+  -v flyrank-data:/var/lib/postgresql/data \
+  -d postgres:16
+```
+
+Check it is up and inspect the tables:
+
+```bash
+docker ps
+docker exec -it flyrank-db psql -U postgres -d tasks -c "\dt"
+```
+
+The named volume `flyrank-data` holds the data, so it survives `docker rm` of the container.
+The image is pinned to `postgres:16` because `postgres:latest` (18+) stores data under a
+different path and rejects a volume mounted at `/var/lib/postgresql/data`.
+
 ## Notes
 
 - Tasks are stored in the SQLite file `tasks.db`, so data persists across server restarts.

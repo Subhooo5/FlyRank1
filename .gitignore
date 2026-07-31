@@ -10,3 +10,7 @@ tasks.db-shm
 *.sqlite
 *.sqlite3
 
+# Local secrets — real values live here, placeholders go in .env.example
+.env
+.env.local
+
