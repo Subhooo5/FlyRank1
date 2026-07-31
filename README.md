@@ -2,13 +2,18 @@
 
 A simple **CRUD REST API** for managing tasks, built with **Node.js** and **Express**.
 Tasks are stored in a **SQLite** database (`tasks.db`) via
-[better-sqlite3](https://github.com/WiseLibs/better-sqlite3), so data survives server
-restarts. See [Database (SQLite)](#database-sqlite) below.
+[better-sqlite3](https://github.com/WiseLibs/better-sqlite3), so data survives server restarts. See [Database (SQLite)](#database-sqlite) below.
 
 Each task has the shape:
 
 ```json
-{ "id": 1, "title": "Buy groceries", "done": false }
+{
+  "id": 1,
+  "title": "Buy groceries",
+  "done": false,
+  "created_at": "2026-07-30 16:21:01",
+  "updated_at": "2026-07-30 16:21:01"
+}
 ```
 
 ## Requirements
@@ -40,7 +45,7 @@ Interactive Swagger documentation is available at **http://localhost:3000/docs**
 |--------|---------------|------------------------------------|---------|----------|
 | GET    | `/`           | API info (name, version, endpoints)| 200     | —        |
 | GET    | `/health`     | Health check                       | 200     | —        |
-| GET    | `/tasks`      | List all tasks (optional `?done=` / `?search=`) | 200 | 400 |
+| GET    | `/tasks`      | List all tasks (optional `?done=` / `?search=` / `?sort=`) | 200 | 400 |
 | GET    | `/tasks/:id`  | Get a single task by ID            | 200     | 404      |
 | POST   | `/tasks`      | Create a task (`title` required)   | 201     | 400      |
 | PUT    | `/tasks/:id`  | Update a task (`title` / `done`)   | 200     | 400, 404 |
@@ -70,13 +75,12 @@ Response:
 HTTP/1.1 200 OK
 X-Powered-By: Express
 Content-Type: application/json; charset=utf-8
-Content-Length: 45
-ETag: W/"2d-Gv8HDdZD1sn+UqMseo56OTgQmek"
+Content-Length: 118
 Date: Tue, 21 Jul 2026 17:16:06 GMT
 Connection: keep-alive
 Keep-Alive: timeout=5
 
-{"id":1,"title":"Buy groceries","done":false}
+{"id":1,"title":"Buy groceries","done":false,"created_at":"2026-07-30 16:21:01","updated_at":"2026-07-30 16:21:01"}
 ```
 
 ### More examples
@@ -100,8 +104,10 @@ curl -i -X DELETE http://localhost:3000/tasks/1
 
 These optional extras were added on top of the core CRUD API:
 
-- **Filtering** — `GET /tasks?done=true` (or `?done=false`) returns only tasks with that completion status.
-- **Search** — `GET /tasks?search=word` returns tasks whose title contains `word` (case-insensitive). Filtering and search can be combined, e.g. `?done=false&search=call`.
+- **Filtering** — `GET /tasks?done=true` (or `?done=false`) returns only tasks with that completion status, via a SQL `WHERE` clause.
+- **Search** — `GET /tasks?search=word` returns tasks whose title contains `word` (case-insensitive), via SQL `LIKE`.
+- **Sort alphabetically** — `GET /tasks?sort=title` returns tasks ordered by title, ignoring case (`ORDER BY title COLLATE NOCASE`). Without `?sort=` the default id order is kept; any other value returns `400 { "error": "invalid sort value" }`. Filtering, search and sort can all be combined, e.g. `?done=false&search=call&sort=title`.
+- **Timestamps** — every task stores `created_at` and `updated_at` (`YYYY-MM-DD HH:MM:SS`, UTC). `created_at` is set once on insert; `updated_at` is refreshed by every successful `PUT`.
 - **Stats** — `GET /stats` returns `{ "total", "done", "open" }` counts computed with SQL `COUNT()` over the `tasks` table.
 - **Reset** — `POST /reset` clears the `tasks` table, re-inserts the original 3 example tasks, and returns the reset list.
 
@@ -113,6 +119,9 @@ curl -i "http://localhost:3000/tasks?done=true"
 
 # Search — tasks whose title contains "call"
 curl -i "http://localhost:3000/tasks?search=call"
+
+# Sort — tasks ordered alphabetically by title
+curl -i "http://localhost:3000/tasks?sort=title"
 
 # Stats — counts of total/done/open
 curl -i http://localhost:3000/stats
@@ -143,8 +152,9 @@ generated from [`openapi.json`](./openapi.json).
 ## Database (SQLite)
 
 Tasks now live in a real database instead of a JavaScript array. Every endpoint
-(`GET`, `POST`, `PUT`, `DELETE`, `/stats`, `/reset`) runs SQL against it — the request
-and response formats are unchanged from Assignment 1.
+(`GET`, `POST`, `PUT`, `DELETE`, `/stats`, `/reset`) runs SQL against it. Paths, status
+codes and error messages are unchanged from Assignment 1; task objects now carry the two
+extra `created_at` / `updated_at` fields.
 
 ### Why SQLite?
 
@@ -176,14 +186,18 @@ Schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS tasks (
-  id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT    NOT NULL,
-  done  INTEGER NOT NULL DEFAULT 0   -- 0 = open, 1 = done
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  title      TEXT    NOT NULL,
+  done       INTEGER NOT NULL DEFAULT 0,                    -- 0 = open, 1 = done
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 ```
 
 SQLite has no boolean type, so `done` is stored as `0`/`1` and converted back to
-`true`/`false` in the JSON responses.
+`true`/`false` in the JSON responses. Timestamps are stored as UTC text in
+`YYYY-MM-DD HH:MM:SS` form. A `tasks.db` created before the timestamp columns existed is
+upgraded automatically on startup (`ALTER TABLE` + backfill), so no manual migration is needed.
 
 ### How to start the project
 
@@ -214,11 +228,11 @@ sqlite3 tasks.db "SELECT COUNT(*) FROM tasks;"
 Example output:
 
 ```
-id  title                 done
---  --------------------  ----
-1   Buy groceries         0
-2   Write project report  1
-3   Call the dentist      0
+id  title                 done  created_at           updated_at
+--  --------------------  ----  -------------------  -------------------
+1   Buy groceries         0     2026-07-30 16:21:01  2026-07-30 16:21:01
+2   Write project report  1     2026-07-30 16:21:01  2026-07-30 16:21:01
+3   Call the dentist      0     2026-07-30 16:21:01  2026-07-30 16:21:01
 ```
 
 Or open `tasks.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and use the

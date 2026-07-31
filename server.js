@@ -1,20 +1,8 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
-const { db, init, reset } = require('./db');
+const { db, init, reset, TASK_COLUMNS } = require('./db');
 
-// The database can also be inspected by hand with the sqlite3 CLI or DB Browser
-// for SQLite, e.g.:
-//   sqlite3 tasks.db "SELECT * FROM tasks;"
-//   sqlite3 tasks.db "SELECT * FROM tasks WHERE done = 1;"
-//   sqlite3 tasks.db "SELECT COUNT(*) FROM tasks;"
-// Write statements such as
-//   UPDATE tasks SET done = 1 WHERE id = 1;   -- marks task 1 complete
-//   DELETE FROM tasks WHERE id = 1;           -- removes task 1
-// change the stored data permanently, so they are documented here rather than
-// run against the seeded database.
-
-// Create the tasks table if needed and seed it on first run only
 init();
 
 const app = express();
@@ -24,14 +12,16 @@ app.use(express.json());
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
-// SQLite stores booleans as 0/1, so rows are mapped back to the JSON shape
-// the API has always returned: { id, title, done: true|false }
 function toTask(row) {
-  return { id: row.id, title: row.title, done: Boolean(row.done) };
+  return {
+    id: row.id,
+    title: row.title,
+    done: Boolean(row.done),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
-// Escape LIKE wildcards so ?search=100% matches literally, like the old
-// JavaScript substring filter did
 function likePattern(needle) {
   return '%' + String(needle).replace(/[\\%_]/g, (c) => '\\' + c) + '%';
 }
@@ -40,7 +30,7 @@ app.get('/', (req, res) => {
   res.json({
     name: 'Task API',
     version: '1.0',
-    endpoints: ['/tasks'],
+    endpoints: ['/tasks', '/stats', '/reset'],
   });
 });
 
@@ -48,7 +38,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Listing all tasks, with optional ?done=, ?search= and ?sort= (all combinable)
+// listing tasks
 app.get('/tasks', (req, res) => {
   const { done, search, sort } = req.query;
 
@@ -64,12 +54,10 @@ app.get('/tasks', (req, res) => {
   }
 
   if (search !== undefined && search !== '') {
-    // LIKE is case-insensitive for ASCII in SQLite, matching the old behaviour
     where.push("title LIKE ? ESCAPE '\\'");
     params.push(likePattern(search));
   }
 
-  // Default ordering stays by id; ?sort=title orders alphabetically, ignoring case
   let orderBy = 'id';
   if (sort !== undefined) {
     if (sort !== 'title') {
@@ -79,7 +67,7 @@ app.get('/tasks', (req, res) => {
   }
 
   const sql =
-    'SELECT id, title, done FROM tasks' +
+    `SELECT ${TASK_COLUMNS} FROM tasks` +
     (where.length ? ' WHERE ' + where.join(' AND ') : '') +
     ' ORDER BY ' +
     orderBy;
@@ -88,31 +76,45 @@ app.get('/tasks', (req, res) => {
   res.json(rows.map(toTask));
 });
 
-// Getting a single task by id
+// counting tasks
+app.get('/stats', (req, res) => {
+  const stats = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         COUNT(CASE WHEN done = 1 THEN 1 END) AS done,
+         COUNT(CASE WHEN done = 0 THEN 1 END) AS open
+       FROM tasks`
+    )
+    .get();
+  res.json(stats);
+});
+
 app.get('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
   if (!row) {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
   res.json(toTask(row));
 });
 
-// Creating a new task
+// inserting a task
 app.post('/tasks', (req, res) => {
   const { title } = req.body || {};
   if (typeof title !== 'string' || title.trim() === '') {
     return res.status(400).json({ error: 'Title is required and must be a non-empty string' });
   }
+
   const info = db.prepare('INSERT INTO tasks (title, done) VALUES (?, 0)').run(title.trim());
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(info.lastInsertRowid);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(info.lastInsertRowid);
   res.status(201).json(toTask(row));
 });
 
-// Updating an existing task
+// updating a task
 app.put('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const existing = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  const existing = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
   if (!existing) {
     return res.status(404).json({ error: `Task ${req.params.id} not found` });
   }
@@ -139,15 +141,16 @@ app.put('/tasks/:id', (req, res) => {
     sets.push('done = ?');
     params.push(done ? 1 : 0);
   }
+  sets.push("updated_at = datetime('now')");
   params.push(id);
 
   db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
   res.json(toTask(row));
 });
 
-// Deleting a task
+// deleting a task
 app.delete('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
   const info = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
@@ -157,18 +160,10 @@ app.delete('/tasks/:id', (req, res) => {
   res.status(204).end();
 });
 
-// Task statistics, counted by SQL
-app.get('/stats', (req, res) => {
-  const { total, done } = db
-    .prepare('SELECT COUNT(*) AS total, COUNT(CASE WHEN done = 1 THEN 1 END) AS done FROM tasks')
-    .get();
-  res.json({ total, done, open: total - done });
-});
-
-// Reset the table back to the original 3 example tasks
+// resetting the tasks table
 app.post('/reset', (req, res) => {
   reset();
-  const rows = db.prepare('SELECT id, title, done FROM tasks ORDER BY id').all();
+  const rows = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY id`).all();
   res.json(rows.map(toTask));
 });
 

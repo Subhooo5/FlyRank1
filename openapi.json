@@ -16,7 +16,7 @@
       "get": {
         "tags": ["Tasks"],
         "summary": "List all tasks",
-        "description": "Returns all tasks. Supports optional filtering by completion status (`done`) and case-insensitive title search (`search`); both may be combined.",
+        "description": "Returns all tasks. Supports optional filtering by completion status (`done`), case-insensitive title search (`search`) and alphabetical ordering (`sort`); all may be combined.",
         "operationId": "listTasks",
         "parameters": [
           {
@@ -32,6 +32,13 @@
             "required": false,
             "description": "Return only tasks whose title contains this word (case-insensitive).",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Order the results alphabetically by title (case-insensitive). Any other value returns 400. Omit for the default id order.",
+            "schema": { "type": "string", "enum": ["title"] }
           }
         ],
         "responses": {
@@ -233,9 +240,11 @@
         "properties": {
           "id": { "type": "integer", "example": 1 },
           "title": { "type": "string", "example": "Buy groceries" },
-          "done": { "type": "boolean", "example": false }
+          "done": { "type": "boolean", "example": false },
+          "created_at": { "type": "string", "example": "2026-07-30 16:21:01" },
+          "updated_at": { "type": "string", "example": "2026-07-30 16:21:01" }
         },
-        "required": ["id", "title", "done"]
+        "required": ["id", "title", "done", "created_at", "updated_at"]
       },
       "NewTask": {
         "type": "object",
