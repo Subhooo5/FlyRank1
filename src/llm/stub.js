@@ -5,4 +5,11 @@ const stubAnswer = {
   reason: 'Stub answer, no model was called.'
 };
 
-module.exports = { stubAnswer };
+const fallbackAnswer = {
+  category: 'other',
+  priority: 'normal',
+  confidence: 0,
+  reason: 'The AI feature is switched off, so this is a safe default.'
+};
+
+module.exports = { stubAnswer, fallbackAnswer };

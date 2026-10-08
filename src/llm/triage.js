@@ -2,50 +2,81 @@ const { callModel } = require('./model');
 const { systemPrompt, version } = require('./prompt');
 const { checkOutput } = require('./parse');
 const { quarantine } = require('./quarantine');
-const { stubAnswer } = require('./stub');
+const { stubAnswer, fallbackAnswer } = require('./stub');
+const { log } = require('./log');
 
 class InvalidOutputError extends Error {}
 
 async function runTriage(text) {
+  if (process.env.LLM_ENABLED === 'false') {
+    log({ event: 'llm_disabled' });
+    return fallbackAnswer;
+  }
   if (process.env.LLM_STUB === '1') {
     return stubAnswer;
   }
+
+  const totals = { inputTokens: 0, outputTokens: 0, durationMs: 0 };
+
+  const ask = async (messages) => {
+    const call = await callModel(messages);
+    totals.inputTokens += call.usage.prompt_tokens || 0;
+    totals.outputTokens += call.usage.completion_tokens || 0;
+    totals.durationMs += call.durationMs;
+    return call.content;
+  };
+
+  const record = (repaired, failed) => {
+    log({
+      event: 'llm_call',
+      promptVersion: version,
+      model: process.env.LLM_MODEL,
+      ...totals,
+      repaired,
+      failed
+    });
+  };
 
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: JSON.stringify({ text }) }
   ];
 
-  const first = await callModel(messages);
-  const firstCheck = checkOutput(first.content);
-  if (firstCheck.ok) {
-    return firstCheck.data;
+  const firstOutput = await ask(messages);
+  const first = checkOutput(firstOutput);
+  
+  if (first.ok) {
+    record(0, false);
+    return first.data;
   }
 
   const repairMessages = [
     ...messages,
-    { role: 'assistant', content: first.content },
+    { role: 'assistant', content: firstOutput },
     {
       role: 'user',
-      content: `Your previous answer was rejected for this reason: ${firstCheck.error}. Return only corrected JSON matching the schema.`
+      content: `Your previous answer was rejected for this reason: ${first.error}. Return only corrected JSON matching the schema.`
     }
   ];
 
-  const second = await callModel(repairMessages);
-  const secondCheck = checkOutput(second.content);
-  if (secondCheck.ok) {
-    return secondCheck.data;
+  const secondOutput = await ask(repairMessages);
+  const second = checkOutput(secondOutput);
+  if (second.ok) {
+    record(1, false);
+    return second.data;
   }
+
+  record(1, true);
 
   quarantine({
     promptVersion: version,
     input: text,
-    firstOutput: first.content,
-    secondOutput: second.content,
-    error: secondCheck.error
+    firstOutput,
+    secondOutput,
+    error: second.error
   });
-  
-  throw new InvalidOutputError(secondCheck.error);
+
+  throw new InvalidOutputError(second.error);
 }
 
 module.exports = { runTriage, InvalidOutputError };
