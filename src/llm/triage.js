@@ -4,6 +4,7 @@ const { checkOutput } = require('./parse');
 const { quarantine } = require('./quarantine');
 const { stubAnswer, fallbackAnswer } = require('./stub');
 const { log } = require('./log');
+const { keyFor, get, set } = require('./cache');
 
 class InvalidOutputError extends Error {}
 
@@ -12,8 +13,16 @@ async function runTriage(text) {
     log({ event: 'llm_disabled' });
     return fallbackAnswer;
   }
+  
   if (process.env.LLM_STUB === '1') {
     return stubAnswer;
+  }
+
+  const key = keyFor(text, version);
+  const cached = get(key);
+  if (cached) {
+    log({ event: 'cache_hit', promptVersion: version });
+    return cached;
   }
 
   const totals = { inputTokens: 0, outputTokens: 0, durationMs: 0 };
@@ -44,7 +53,7 @@ async function runTriage(text) {
 
   const firstOutput = await ask(messages);
   const first = checkOutput(firstOutput);
-  
+
   if (first.ok) {
     record(0, false);
     return first.data;
