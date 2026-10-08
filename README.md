@@ -330,6 +330,82 @@ same effect.
 - IDs auto-increment and are not reused after deletion. `POST /reset` empties the table and
   restarts IDs from 1.
 
-Three environment variables (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`) are the only difference between a model on my laptop and one in a datacentre, so a provider is never hard-coded.
+## Triage endpoint
 
-Retries: the SDK's built-in retries are turned off (`maxRetries: 0`) and my own retry logic in `src/llm/model.js` is used instead, so one request never silently becomes several calls.
+POST /triage reads one task description and tells the app which kind of task it is (work, study, personal, shopping or other), how urgent it is, how sure it is, and why. It returns the same four fields every time. When the text is unclear it says "other" with low confidence instead of guessing.
+
+### Try it
+
+```
+curl -i -X POST http://localhost:3000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Submit the quarterly report to my manager by tomorrow morning"}'
+```
+
+Exact response (paste your real one):
+
+```
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 108
+ETag: W/"6c-xQOzxU8bdqphe2j7jBdU5sYyhic"
+Date: Thu, 08 Oct 2026 16:30:22 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"category":"work","priority":"high","confidence":0.95,"reason":"A work deliverable with a close deadline."}
+```
+
+Broken input:
+
+```
+curl -i -X POST http://localhost:3000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"wrong":"field"}'
+```
+
+Returns 400 with `{"error":"text: ..."}`.
+
+### Job card
+
+PASTE THE FULL CONTENT OF JOB-CARD.md HERE, including the "It must never" list.
+
+### Provider
+
+Provider: OpenRouter (or Ollama). Model: `openrouter/free` (or your model).
+To swap provider or model, change only these three variables in `.env`: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`.
+
+Other variables: `LLM_STUB=1` returns a fake valid answer without calling a model, `LLM_ENABLED=false` is the kill switch, `PROMPT_VERSION` picks the prompt file.
+
+### Setup and run
+
+```
+npm install
+cp .env.example .env
+npm start
+```
+
+Fill `.env` with your own `DATABASE_URL` and LLM values first (the existing Task API needs its database to start).
+
+### Reliability
+
+- 30 second timeout on every model call, returned as 504
+- Retries on timeouts, 429 and 5xx with exponential backoff and jitter, honouring Retry-After; never on 400, 401 or 403
+- SDK retries are off (`maxRetries: 0`), my own retry logic is used instead
+- Invalid model output gets one repair retry, then 422 and a line in `logs/quarantine.jsonl`
+- Raw model text is never returned to the caller
+
+### Eval result
+
+date=2026-10-08 prompt=v1 model=openrouter/free
+score=8/8 (100%)
+failed: []
+
+### Cost log (one call)
+
+```
+api-1  | {"time":"2026-10-08T16:25:34.663Z","event":"llm_call","promptVersion":"v1","model":"openrouter/free","inputTokens":411,"outputTokens":96,"durationMs":1658,"repaired":0,"failed":false}
+```
+
+Estimate: (input tokens + output tokens) x 10,000 requests per day = TOTAL tokens per day. Free models cost $0, and at a paid model's price from the LLM price calculator that is about $COST per day.
