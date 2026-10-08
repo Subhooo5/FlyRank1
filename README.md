@@ -329,3 +329,5 @@ same effect.
   restarts of both the app and the containers.
 - IDs auto-increment and are not reused after deletion. `POST /reset` empties the table and
   restarts IDs from 1.
+  
+Three environment variables (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`) are the only difference between a model on my laptop and one in a datacentre, so a provider is never hard-coded.

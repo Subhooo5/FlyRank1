@@ -14,3 +14,4 @@ tasks.db-shm
 .env
 .env.local
 
+logs/
