@@ -1,10 +1,10 @@
 const express = require('express');
-const { inputSchema, outputSchema } = require('../llm/schema');
-const { stubAnswer } = require('../llm/stub');
+const { inputSchema } = require('../llm/schema');
+const { runTriage } = require('../llm/triage');
 
 const router = express.Router();
 
-router.post('/triage', (req, res) => {
+router.post('/triage', async (req, res) => {
   const parsed = inputSchema.safeParse(req.body || {});
 
   if (!parsed.success) {
@@ -13,7 +13,8 @@ router.post('/triage', (req, res) => {
     return res.status(400).json({ error: `${field}: ${issue.message}` });
   }
   
-  res.status(200).json(outputSchema.parse(stubAnswer));
+  const result = await runTriage(parsed.data.text);
+  res.status(200).json(result);
 });
 
 module.exports = router;
