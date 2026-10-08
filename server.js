@@ -1,14 +1,17 @@
 require('dotenv').config();
 
+
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapiSpec = require('./openapi.json');
 const db = require('./db');
+const triageRoutes = require('./src/routes/triage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(triageRoutes);
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 

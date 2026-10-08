@@ -5,12 +5,28 @@ services:
     build: .
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgres://postgres:dev@db:5432/tasks
       PORT: 3000
     depends_on:
       db:
         condition: service_healthy
+    develop:
+      watch:
+        - action: rebuild
+          path: ./server.js
+        - action: rebuild
+          path: ./db.js
+        - action: rebuild
+          path: ./src
+        - action: rebuild
+          path: ./prompts
+        - action: rebuild
+          path: ./openapi.json
+        - action: rebuild
+          path: ./package.json
 
   db:
     image: postgres:16
